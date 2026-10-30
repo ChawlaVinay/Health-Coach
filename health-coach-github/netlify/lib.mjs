@@ -1,0 +1,7 @@
+import {createHmac} from 'node:crypto';
+const E=process.env,TOK='https://api.prod.whoop.com/oauth/oauth2/token';
+export const sign=s=>createHmac('sha256',E.WHOOP_CLIENT_SECRET).update(s).digest('hex');
+export const uid=async req=>{const t=(req.headers.get('authorization')||'').replace('Bearer ','');if(!t)return null;const r=await fetch(E.SUPABASE_URL+'/auth/v1/user',{headers:{apikey:E.SUPABASE_SERVICE_KEY,Authorization:'Bearer '+t}});return r.ok?(await r.json()).id:null};
+export const rest=(p,o={})=>fetch(E.SUPABASE_URL+'/rest/v1/'+p,{...o,headers:{apikey:E.SUPABASE_SERVICE_KEY,'Content-Type':'application/json',...(o.headers||{})}});
+export async function saveTok(u,j){await rest('whoop_tokens',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify({user_id:u,access_token:j.access_token,refresh_token:j.refresh_token,expires_at:new Date(Date.now()+j.expires_in*1000).toISOString(),updated_at:new Date().toISOString()})})}
+export async function getTok(u,force){const r=await rest('whoop_tokens?user_id=eq.'+u+'&select=*'),a=await r.json(),t=Array.isArray(a)&&a[0];if(!t)return null;if(!force&&new Date(t.expires_at)-Date.now()>60000)return t.access_token;const p=await fetch(TOK,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:t.refresh_token,client_id:E.WHOOP_CLIENT_ID,client_secret:E.WHOOP_CLIENT_SECRET,scope:'offline'})});if(!p.ok)return null;const j=await p.json();await saveTok(u,j);return j.access_token}
